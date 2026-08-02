@@ -17,6 +17,7 @@ app.use(express.json());
 
 // health check endpoint
 app.get("/health", (req, res) => {
+  logger.info(`/health route called`);
   res.json({
     status: "ok",
     service: "curastra-abha-microservice",
