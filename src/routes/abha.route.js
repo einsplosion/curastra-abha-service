@@ -1,7 +1,7 @@
 const express = require("express");
 const abhaController = require("../controllers/abha.controller.js");
 const auth = require("../middlewares/auth.middleware.js");
-const { abhaLimiter } = require("../middlewares/ratelimiter.middleware.js");
+const { abhaLimiter } = require("../middlewares/rateLimiter.middleware.js");
 const validate = require("../middlewares/validate.middleware.js");
 const { enrollInitiateSchema, enrollVerifySchema } = require("../validations/abha.validation.js");
 
