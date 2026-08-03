@@ -12,7 +12,7 @@ const fetchNewToken = async () => {
 
     const sessionUrl =
       process.env.ABDM_SESSION_URL ||
-      "https://dev.abdm.gov.in/gateway/v0.5/sessions";
+      "https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions";
 
     const response = await axios.post(
       sessionUrl,
@@ -25,6 +25,7 @@ const fetchNewToken = async () => {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
+          "X-CM-ID": "sbx",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },

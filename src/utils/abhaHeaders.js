@@ -5,6 +5,7 @@ const buildAbhaHeaders = (token) => {
     Authorization: `Bearer ${token}`,
     "REQUEST-ID": uuidv4(),
     TIMESTAMP: new Date().toISOString(),
+    "X-CM-ID": "sbx",
     Accept: "application/json",
     "Content-Type": "application/json",
     "User-Agent":
