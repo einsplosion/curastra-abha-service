@@ -5,6 +5,7 @@ const abhaLimiter = rateLimit({
   max: 20, // max 20 requests per 15 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     success: false,
     message: "Too many ABHA requests from this IP, please try again after 15 minutes.",
