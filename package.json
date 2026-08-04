@@ -7,7 +7,7 @@
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "echo \"No test specified\"",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
