@@ -15,17 +15,39 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+const axios = require("axios");
+
 // health check endpoints
-const healthCheckHandler = (req, res) => {
+const healthCheckHandler = async (req, res) => {
   logger.info(`${req.path} route called`);
+  
+  let outboundIp = "Unknown";
+  let geoDetails = {};
+
+  try {
+    const ipRes = await axios.get("http://ip-api.com/json/", { timeout: 4000 });
+    outboundIp = ipRes.data.query;
+    geoDetails = {
+      country: ipRes.data.country,
+      countryCode: ipRes.data.countryCode,
+      region: ipRes.data.regionName,
+      city: ipRes.data.city,
+      isp: ipRes.data.isp,
+    };
+  } catch (err) {
+    logger.error("Failed to resolve outbound IP:", err.message);
+  }
+
   res.json({
     status: "ok",
     service: "curastra-abha-microservice",
-    location: "India Region",
+    outboundIp,
+    geoDetails,
     timestamp: new Date().toISOString(),
   });
 };
 
+app.get("/", healthCheckHandler);
 app.get("/health", healthCheckHandler);
 app.get("/api/abha/health", healthCheckHandler);
 app.get("/status", healthCheckHandler);
