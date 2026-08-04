@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require("uuid");
 const axios = require("axios");
 const logger = require("../config/logger.js");
 
@@ -10,9 +11,10 @@ const fetchNewToken = async () => {
       throw new Error("ABDM client credentials not configured");
     }
 
-    const sessionUrl =
-      process.env.ABDM_SESSION_URL ||
-      "https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions";
+    let sessionUrl = process.env.ABDM_SESSION_URL;
+    if (!sessionUrl || sessionUrl.includes("v0.5")) {
+      sessionUrl = "https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions";
+    }
 
     const response = await axios.post(
       sessionUrl,
@@ -23,9 +25,11 @@ const fetchNewToken = async () => {
       },
       {
         headers: {
+          "REQUEST-ID": uuidv4(),
+          TIMESTAMP: new Date().toISOString(),
+          "X-CM-ID": "sbx",
           Accept: "application/json",
           "Content-Type": "application/json",
-          "X-CM-ID": "sbx",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
