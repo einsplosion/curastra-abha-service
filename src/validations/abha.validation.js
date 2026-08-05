@@ -10,16 +10,7 @@ const enrollInitiateSchema = Joi.object({
       "string.pattern.base": "Aadhaar number must contain only digits",
       "any.required": "Aadhaar number is required",
     }),
-
-  profile_id: Joi.string()
-    .uuid()
-    .required()
-    .messages({
-      "string.uuid": "Invalid profile ID format",
-      "any.required": "Profile ID is required",
-    }),
 });
-
 
 const enrollVerifySchema = Joi.object({
   txnId: Joi.string().required().messages({
@@ -43,11 +34,6 @@ const enrollVerifySchema = Joi.object({
     .messages({
       "string.length": "Mobile number must be 10 digits",
     }),
-
-  profile_id: Joi.string().uuid().required().messages({
-    "string.uuid": "Invalid profile ID format",
-    "any.required": "Profile ID is required",
-  }),
 });
 
 module.exports = { enrollInitiateSchema, enrollVerifySchema };

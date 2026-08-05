@@ -1,5 +1,4 @@
 const axios = require("axios");
-const { pool } = require("../config/db.js");
 const logger = require("../config/logger.js");
 const buildAbhaHeaders = require("../utils/abhaHeaders.js");
 const { getGatewayToken } = require("./gatewayToken.service.js");
@@ -8,7 +7,6 @@ const { encryptForAbdm } = require("../utils/encryption.js");
 // constants
 const BASE = process.env.ABDM_BASE_URL;
 const ABDM_TIMEOUT = 30000;
-
 
 // formats current timestamp as "YYYY-MM-DD HH:MM:SS", abdm does not accept ISO
 const getSimpleTimestamp = () => {
@@ -29,77 +27,15 @@ const getSimpleTimestamp = () => {
   );
 };
 
-
-// resolves and verifies profile ownership
-const resolveAndVerifyProfile = async (userId, targetProfileId = null, client = pool) => {
-  let query, params;
-
-  if (targetProfileId) {
-    query = `SELECT id, name, relationship, is_primary, abha_number, abha_address, abha_linked
-             FROM profiles
-             WHERE id = $1 AND owner_user_id = $2`;
-    params = [targetProfileId, userId];
-  } else {
-    query = `SELECT id, name, relationship, is_primary, abha_number, abha_address, abha_linked
-             FROM profiles
-             WHERE owner_user_id = $1 AND is_primary = TRUE`;
-    params = [userId];
-  }
-
-  const result = await client.query(query, params);
-
-  if (result.rows.length === 0) {
-    const error = new Error(
-      targetProfileId
-        ? "Target profile not found or access denied."
-        : "Primary user profile not found."
-    );
-    error.status = targetProfileId ? 404 : 500;
-    throw error;
-  }
-
-  return result.rows[0];
-};
-
-
-// checks if an ABHA number is already linked to a profile in Curastra
-const checkAbhaAvailability = async (abhaNumber, targetProfileId, client = pool) => {
-  const result = await client.query(
-    `SELECT id, owner_user_id, name FROM profiles WHERE abha_number = $1`,
-    [abhaNumber]
-  );
-
-  if (result.rows.length === 0) {
-    return { status: "AVAILABLE" };
-  }
-
-  const existingProfile = result.rows[0];
-
-  if (existingProfile.id === targetProfileId) {
-    return { status: "ALREADY_LINKED_TO_SELF", profile: existingProfile };
-  }
-
-  return { status: "LINKED_TO_OTHER", profile: existingProfile };
-};
-
-
 // ENROLLMENT REQUEST OTP
-// 1. validate inputs and verify profile ownership
+// 1. validate 12-digit Aadhaar number
 // 2. encrypt Aadhaar number using RSA-OAEP SHA-1 spec
 // 3. call ABDM Gateway to trigger OTP to Aadhaar-linked mobile
 // 4. return txnId for Step 2
-const enrollmentRequestOtp = async (userId, aadhaarNumber, profileId = null) => {
+const enrollmentRequestOtp = async (aadhaarNumber) => {
   if (!aadhaarNumber || aadhaarNumber.length !== 12) {
     const error = new Error("Valid 12-digit Aadhaar number is required");
     error.status = 400;
-    throw error;
-  }
-
-  const targetProfile = await resolveAndVerifyProfile(userId, profileId);
-
-  if (targetProfile.abha_linked) {
-    const error = new Error("This profile is already linked to an ABHA number.");
-    error.status = 409;
     throw error;
   }
 
@@ -107,10 +43,7 @@ const enrollmentRequestOtp = async (userId, aadhaarNumber, profileId = null) => 
     const encryptedAadhaar = await encryptForAbdm(aadhaarNumber);
     const token = await getGatewayToken();
 
-    logger.info("Requesting ABHA enrollment OTP", {
-      userId,
-      profileId: targetProfile.id,
-    });
+    logger.info("Requesting ABHA enrollment OTP");
 
     const response = await axios.post(
       `${BASE}/v3/enrollment/request/otp`,
@@ -149,28 +82,15 @@ const enrollmentRequestOtp = async (userId, aadhaarNumber, profileId = null) => 
   }
 };
 
-
 // ENROLL BY AADHAAR
-// 1. validate inputs and resolve target profile
+// 1. validate inputs (txnId, otp)
 // 2. encrypt OTP using RSA-OAEP SHA-1 spec
 // 3. submit to ABDM for verification
-// 4. extract ABHA details from gateway response
-// 5. open atomic database transaction
-// 6. verify ABHA number availability (prevent cross-profile duplicates / account takeover)
-// 7. update target profile with abha_number, abha_address, abha_linked = TRUE
-// 8. commit transaction and return updated profile data
-const enrolByAadhaar = async (userId, txnId, otp, mobile, profileId = null) => {
+// 4. extract and return raw ABHA profile payload ({ abhaNumber, abhaAddress, name, isNew })
+const enrolByAadhaar = async (txnId, otp, mobile = "") => {
   if (!txnId || !otp) {
     const error = new Error("txnId and OTP are required");
     error.status = 400;
-    throw error;
-  }
-
-  const targetProfile = await resolveAndVerifyProfile(userId, profileId);
-
-  if (targetProfile.abha_linked) {
-    const error = new Error("This profile is already linked to an ABHA number.");
-    error.status = 409;
     throw error;
   }
 
@@ -178,10 +98,7 @@ const enrolByAadhaar = async (userId, txnId, otp, mobile, profileId = null) => {
     const encryptedOtp = await encryptForAbdm(otp);
     const token = await getGatewayToken();
 
-    logger.info("Verifying ABHA enrollment OTP", {
-      userId,
-      profileId: targetProfile.id,
-    });
+    logger.info("Verifying ABHA enrollment OTP with ABDM");
 
     const response = await axios.post(
       `${BASE}/v3/enrollment/enrol/byAadhaar`,
@@ -219,60 +136,12 @@ const enrolByAadhaar = async (userId, txnId, otp, mobile, profileId = null) => {
       throw error;
     }
 
-    const client = await pool.connect();
-
-    try {
-      await client.query("BEGIN");
-
-      const availability = await checkAbhaAvailability(abhaNumber, targetProfile.id, client);
-
-      if (availability.status === "LINKED_TO_OTHER") {
-        await client.query("ROLLBACK");
-        const error = new Error("This ABHA number is already linked to another profile in Curastra.");
-        error.status = 409;
-        throw error;
-      }
-
-      if (availability.status === "ALREADY_LINKED_TO_SELF") {
-        await client.query("ROLLBACK");
-        return {
-          abhaNumber,
-          abhaAddress,
-          isNew: false,
-          name,
-          profile: targetProfile,
-          message: "ABHA is already linked to this profile",
-        };
-      }
-
-      const updateResult = await client.query(
-        `UPDATE profiles
-         SET abha_number = $1, abha_address = $2, abha_linked = TRUE
-         WHERE id = $3 AND owner_user_id = $4
-         RETURNING id, owner_user_id, name, relationship, is_primary, abha_number, abha_address, abha_linked`,
-        [abhaNumber, abhaAddress, targetProfile.id, userId]
-      );
-
-      await client.query("COMMIT");
-
-      return {
-        abhaNumber,
-        abhaAddress,
-        isNew,
-        name,
-        profile: updateResult.rows[0],
-      };
-    } catch (err) {
-      await client.query("ROLLBACK");
-      if (err.code === "23505") {
-        const error = new Error("This ABHA number is already linked to another profile in Curastra.");
-        error.status = 409;
-        throw error;
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
+    return {
+      abhaNumber,
+      abhaAddress,
+      isNew,
+      name,
+    };
   } catch (err) {
     if (err.status && !err.isAxiosError) throw err;
 

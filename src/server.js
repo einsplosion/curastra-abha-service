@@ -3,7 +3,6 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 
-const { testConnection } = require("./config/db.js");
 const logger = require("./config/logger.js");
 const abhaRoutes = require("./routes/abha.route.js");
 
@@ -31,10 +30,10 @@ app.get("/health", healthCheckHandler);
 app.get("/api/abha/health", healthCheckHandler);
 app.get("/status", healthCheckHandler);
 
-// ABHA Microservice Routes
+// ABHA microservice routes
 app.use("/api/abha", abhaRoutes);
 
-// 404 Handler
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found" });
 });
@@ -52,7 +51,6 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5001;
 
 const startServer = async () => {
-  await testConnection();
   app.listen(PORT, "0.0.0.0", () => {
     logger.info(`ABHA Microservice running on port ${PORT} (0.0.0.0)`);
   });
